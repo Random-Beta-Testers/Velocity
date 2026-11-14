@@ -45,6 +45,12 @@ import java.util.Map;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manages endpoints managed by Velocity, along with initializing the Netty event loop group.
@@ -67,6 +73,7 @@ public final class ConnectionManager {
   public final BackendChannelInitializerHolder backendChannelInitializer;
 
   private final SeparatePoolInetNameResolver resolver;
+  private final ExecutorService httpExecutor;
 
   /**
    * Initializes the {@code ConnectionManager}.
@@ -83,6 +90,20 @@ public final class ConnectionManager {
     this.backendChannelInitializer = new BackendChannelInitializerHolder(
         new BackendChannelInitializer(this.server));
     this.resolver = new SeparatePoolInetNameResolver(GlobalEventExecutor.INSTANCE);
+    int httpThreads = Math.max(4, Runtime.getRuntime().availableProcessors());
+    ThreadPoolExecutor executor = new ThreadPoolExecutor(
+          httpThreads,
+          httpThreads,
+          60L, TimeUnit.SECONDS,
+          new LinkedBlockingQueue<>(4096),
+          new ThreadFactoryBuilder()
+                  .setNameFormat("Velocity HttpClient Worker - #%d")
+                  .setDaemon(true)
+                  .build(),
+          new ThreadPoolExecutor.AbortPolicy()
+    );
+    executor.allowCoreThreadTimeOut(true);
+    this.httpExecutor = executor;
   }
 
   public void logChannelInformation() {
@@ -264,6 +285,7 @@ public final class ConnectionManager {
   public void shutdown() {
     this.closeEndpoints(true);
 
+    this.httpExecutor.shutdown();
     this.resolver.shutdown();
   }
 
@@ -277,9 +299,13 @@ public final class ConnectionManager {
 
   @SuppressWarnings("checkstyle:MissingJavadocMethod")
   public HttpClient createHttpClient() {
-    return HttpClient.newBuilder()
-            .executor(this.workerGroup)
-            .build();
+      int timeoutMs = this.server.getConfiguration().getConnectTimeout();
+      Duration connectTimeout = Duration.ofMillis(timeoutMs > 0 ? timeoutMs : 3000);
+
+      return HttpClient.newBuilder()
+              .executor(this.httpExecutor)
+              .connectTimeout(connectTimeout)
+              .build();
   }
 
   public BackendChannelInitializerHolder getBackendChannelInitializer() {
