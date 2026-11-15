@@ -38,6 +38,7 @@ import com.velocitypowered.proxy.util.AddressUtil;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -71,6 +72,8 @@ public class VelocityConfiguration implements ProxyConfig {
   private int showMaxPlayers = 500;
   @Expose
   private boolean onlineMode = true;
+  @Expose
+  private ElyByConfig elyByConfig = ElyByConfig.DEFAULT;
   @Expose
   private boolean preventClientProxyConnections = false;
   @Expose
@@ -110,6 +113,7 @@ public class VelocityConfiguration implements ProxyConfig {
   }
 
   private VelocityConfiguration(String bind, String motd, int showMaxPlayers, boolean onlineMode,
+      ElyByConfig elyByConfig,
       boolean preventClientProxyConnections, boolean announceForge,
       PlayerInfoForwarding playerInfoForwardingMode, byte[] forwardingSecret,
       boolean onlineModeKickExistingPlayers, PingPassthroughMode pingPassthrough,
@@ -120,6 +124,7 @@ public class VelocityConfiguration implements ProxyConfig {
     this.motd = motd;
     this.showMaxPlayers = showMaxPlayers;
     this.onlineMode = onlineMode;
+    this.elyByConfig = elyByConfig;
     this.preventClientProxyConnections = preventClientProxyConnections;
     this.announceForge = announceForge;
     this.playerInfoForwardingMode = playerInfoForwardingMode;
@@ -160,6 +165,25 @@ public class VelocityConfiguration implements ProxyConfig {
     if (!onlineMode) {
       logger.warn("The proxy is running in offline mode! This is a security risk and you will NOT "
           + "receive any support!");
+    }
+
+    if (elyByConfig.enabled) {
+      if (elyByConfig.sessionServerUrl.isBlank()) {
+        logger.error("'session-server-url' option is empty.");
+        valid = false;
+      } else {
+        try {
+          URI uri = URI.create(elyByConfig.sessionServerUrl().trim());
+          if ((!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme()))
+                  || uri.getHost() == null) {
+            logger.error("'session-server-url' must be a valid http/https URL.");
+            valid = false;
+          }
+        } catch (IllegalArgumentException e) {
+          logger.error("'session-server-url' option does not contain a valid link", e);
+          valid = false;
+        }
+      }
     }
 
     switch (playerInfoForwardingMode) {
@@ -299,6 +323,10 @@ public class VelocityConfiguration implements ProxyConfig {
   @Override
   public boolean isOnlineMode() {
     return onlineMode;
+  }
+
+  public ElyByConfig getElyByConfig() {
+    return elyByConfig;
   }
 
   @Override
@@ -464,6 +492,7 @@ public class VelocityConfiguration implements ProxyConfig {
         .add("motd", motd)
         .add("showMaxPlayers", showMaxPlayers)
         .add("onlineMode", onlineMode)
+        .add("elyByConfig", elyByConfig)
         .add("playerInfoForwardingMode", playerInfoForwardingMode)
         .add("forwardingSecret", forwardingSecret)
         .add("announceForge", announceForge)
@@ -564,6 +593,7 @@ public class VelocityConfiguration implements ProxyConfig {
       final String bind = config.getOrElse("bind", "0.0.0.0:25565");
       final int maxPlayers = config.getIntOrElse("show-max-players", 500);
       final boolean onlineMode = config.getOrElse("online-mode", true);
+      final ElyByConfig elyByConfig = ElyByConfig.fromConfig(config.get("ely-by"));
       final boolean forceKeyAuthentication = config.getOrElse("force-key-authentication", true);
       final boolean announceForge = config.getOrElse("announce-forge", true);
       final boolean preventClientProxyConnections = config.getOrElse(
@@ -586,6 +616,7 @@ public class VelocityConfiguration implements ProxyConfig {
               motd,
               maxPlayers,
               onlineMode,
+              elyByConfig,
               preventClientProxyConnections,
               announceForge,
               forwardingMode,
@@ -1032,6 +1063,36 @@ public class VelocityConfiguration implements ProxyConfig {
       } else {
         return DEFAULT;
       }
+    }
+  }
+
+  /**
+   * Configuration for the Ely.by authentication fallback.
+   *
+   * @param enabled whether the Ely.by fallback is enabled
+   * @param sessionServerUrl the Ely.by session server URL
+   */
+  public record ElyByConfig(boolean enabled, String sessionServerUrl) {
+
+    public static final ElyByConfig DEFAULT = new ElyByConfig(
+        false,
+        "https://authserver.ely.by/session/hasJoined"
+    );
+
+    /**
+     * Returns an {@code ElyByConfig} from a config section, or the default if the section is null.
+     *
+     * @param config the configuration object to parse
+     * @return the Ely.by config, or the default if {@code config} is null
+     */
+    public static ElyByConfig fromConfig(@Nullable CommentedConfig config) {
+      if (config == null) {
+        return DEFAULT;
+      }
+      return new ElyByConfig(
+          config.getOrElse("enabled", DEFAULT.enabled()),
+          config.getOrElse("session-server-url", DEFAULT.sessionServerUrl())
+      );
     }
   }
 }

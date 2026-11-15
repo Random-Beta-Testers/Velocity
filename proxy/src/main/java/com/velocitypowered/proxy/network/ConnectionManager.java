@@ -20,6 +20,7 @@ package com.velocitypowered.proxy.network;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.velocitypowered.api.event.proxy.ListenerBoundEvent;
 import com.velocitypowered.api.event.proxy.ListenerCloseEvent;
 import com.velocitypowered.api.network.ListenerType;
@@ -40,17 +41,16 @@ import io.netty.util.concurrent.GlobalEventExecutor;
 import io.netty.util.concurrent.MultithreadEventExecutorGroup;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.checkerframework.checker.nullness.qual.Nullable;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Manages endpoints managed by Velocity, along with initializing the Netty event loop group.
@@ -299,13 +299,13 @@ public final class ConnectionManager {
 
   @SuppressWarnings("checkstyle:MissingJavadocMethod")
   public HttpClient createHttpClient() {
-      int timeoutMs = this.server.getConfiguration().getConnectTimeout();
-      Duration connectTimeout = Duration.ofMillis(timeoutMs > 0 ? timeoutMs : 3000);
+    int timeoutMs = this.server.getConfiguration().getConnectTimeout();
+    Duration connectTimeout = Duration.ofMillis(timeoutMs > 0 ? timeoutMs : 3000);
 
-      return HttpClient.newBuilder()
-              .executor(this.httpExecutor)
-              .connectTimeout(connectTimeout)
-              .build();
+    return HttpClient.newBuilder()
+        .executor(this.httpExecutor)
+        .connectTimeout(connectTimeout)
+        .build();
   }
 
   public BackendChannelInitializerHolder getBackendChannelInitializer() {

@@ -59,6 +59,12 @@ sample-players-in-ping = false
 # If not enabled (default is true) player IP addresses will be replaced by <ip address withheld> in logs
 enable-player-address-logging = true
 
+[ely-by]
+# Enable fallback authentication via Ely.by if Mojang session verification returns 204 (not found).
+enabled = false
+# Ely.by hasJoined endpoint URL.
+session-server-url = "https://authserver.ely.by/session/hasJoined"
+
 [ping-passthrough]
 # Should Velocity pass the version number from the backend server when responding to server list ping requests?
 version = false
